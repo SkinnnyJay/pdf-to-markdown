@@ -1,0 +1,37 @@
+---
+description: "pdf-markdown Python code quality: ruff, typing, docstrings, config"
+alwaysApply: true
+---
+
+# Code Quality Standards
+
+## Format & Lint
+- **Formatter**: `ruff format` — run via `make format`
+- **Linter**: `ruff check` — run via `make lint`
+- **Line length**: 100 characters
+- **Quality gate**: `make check` (format + lint)
+
+## Typing
+- Type all public function parameters and return values
+- Prefer `X | Y` union syntax over `Optional[X]` / `Union[X, Y]`
+- Use `from __future__ import annotations` for forward references when needed
+- No `# type: ignore` without a brief justification
+
+## Configuration
+- Use `Settings` from `pdf_markdown.config` for runtime config
+- Load from `.env` and environment variables; never hardcode paths or secrets
+
+## Docstrings
+- All public functions and classes: Google-style docstrings
+- Include Args, Returns, Raises where relevant
+- Only meaningful comments: explain "why", not "what"
+
+## Naming
+- snake_case for functions, variables, modules
+- PascalCase for classes
+- UPPER_SNAKE for module-level constants
+
+## Structure
+- One responsibility per module under `src/pdf_markdown/`
+- Test files mirror source: `tests/test_<module>.py`
+- Use `__all__` to declare public API

@@ -1,0 +1,21 @@
+---
+description: "Use senior-simplify-review skill for over-engineering audits and phased remediation"
+globs: ["**/*.py"]
+---
+
+# Senior Simplify & Review
+
+When performing deep code review, simplification audits, or refactor planning:
+
+1. **Apply the senior-simplify-review skill** if available.
+
+2. **Look for**:
+   - Over-engineered solutions (unnecessary abstraction, wrong responsibility)
+   - Long functions (>80 lines) and large files (>400 lines)
+   - Weak typing (missing annotations, `# type: ignore` without justification)
+   - Config not via `Settings`; direct `os.environ` or hardcoded paths
+   - Duplication and missing utilities; redundant comments
+
+3. **Output**: Findings table (Priority, File, Line(s), Category, Finding, Justification) plus a Phased Remediation Plan.
+
+4. **Priorities**: P0 = correctness/security; P1 = size/responsibility; P2 = types/config; P3 = naming/comments.

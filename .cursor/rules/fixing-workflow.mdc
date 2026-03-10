@@ -1,0 +1,55 @@
+---
+description: "Workflow for fixing lint, test, and build failures. Use make commands."
+alwaysApply: true
+---
+
+# Fixing Workflow
+
+When fixing lint errors, test failures, or build issues, follow this process. Never skip steps.
+
+## Step 1: Discover ALL Failures
+
+Run the appropriate command before touching any code:
+
+| Category | Discovery command |
+|----------|-------------------|
+| Lint / format | `make check` |
+| Unit tests | `make test` |
+| Coverage | `make test-cov` |
+| Build (wheel/sdist) | `python -m build` |
+
+Read the complete output.
+
+## Step 2: Create a Task List of ALL Failures
+
+Catalog every failure into a task list:
+- One item per distinct error/failure
+- Include file path and short description
+- Mark all items as pending
+
+Example:
+```
+[ ] src/pdf_markdown/output.py -- line too long (E501)
+[ ] tests/test_cli.py -- "test_convert_uses_fallback" assertion fails
+```
+
+## Step 3: Fix Each Issue Individually
+
+For each item:
+1. Read the failing file and understand the root cause
+2. Apply the minimal, correct fix
+3. Verify the fix:
+   - Lint: `ruff check <file>` or `ruff format <file>`
+   - Test: `pytest tests/<test_file>.py -v`
+4. Mark done only after verification passes
+
+## Step 4: Do NOT Run Full Suite Until All Items Resolved
+
+Iterate one at a time. Avoid long full runs while issues remain.
+
+## Step 5: Run Full Suite to Confirm
+
+Once all items are resolved:
+1. Run `make check && make test`
+2. If regressions appear, add them to the task list and fix
+3. Repeat until clean

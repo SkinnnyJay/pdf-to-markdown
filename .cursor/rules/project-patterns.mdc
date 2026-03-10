@@ -1,0 +1,24 @@
+---
+description: "pdf-markdown CLI, config, and module patterns"
+globs: ["src/pdf_markdown/**/*.py"]
+alwaysApply: false
+---
+
+# Project Patterns
+
+## CLI (Typer)
+- Commands in `cli.py`; use `Annotated` with `typer.Option` / `typer.Argument`
+- Read config via `Settings()`; pass through to helpers
+- Use `console.print()` for user output (stderr); `typer.echo()` for structured stdout (e.g. dry-run tables)
+
+## Config
+- `config.py` loads `.env` and `os.environ`; `Settings` is the single source
+- New settings: add to `Settings`, document in `.env.example`, update README
+
+## Subprocess (Marker)
+- `marker_runner.run_marker()` wraps `marker_single`; pass `model_path` for HF_HOME
+- Use `subprocess.run` with `capture_output=True`, `timeout`, `env` when overriding
+
+## Output & Logging
+- Run logs: NDJSON in `data/runs/<run-name>/output.log`
+- `ConversionResult` and `RunSummary` in `models.py`; include `worker_id` when parallel
