@@ -12,14 +12,11 @@ Exit codes:
     2  — bad arguments / output path does not exist.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
 from pathlib import Path
 
-# Allow running directly without installing the package.
 _ROOT = Path(__file__).parent.parent / "src"
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -53,11 +50,11 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _colour(text: str, code: str) -> str:
-    """ANSI colour wrap — skipped when stdout is not a TTY."""
+def _colour(text: str, ansi_code: str) -> str:
+    """Wrap *text* in an ANSI colour escape; pass-through when stdout is not a TTY."""
     if not sys.stdout.isatty():
         return text
-    return f"\033[{code}m{text}\033[0m"
+    return f"\033[{ansi_code}m{text}\033[0m"
 
 
 def main() -> int:
@@ -80,7 +77,6 @@ def main() -> int:
         print(_colour(f"✓ All files valid in {args.output}", "32"))
         return 0
 
-    # Human-readable table
     errors = [i for i in issues if i["severity"] == "error"]
     warnings = [i for i in issues if i["severity"] == "warning"]
 
