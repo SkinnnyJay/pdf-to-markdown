@@ -7,7 +7,7 @@ Thank you for taking the time to contribute! This document explains how to get s
 ## Quick start
 
 ```bash
-git clone https://github.com/your-org/pdf-markdown.git
+git clone https://github.com/SkinnnyJay/pdf-markdown.git
 cd pdf-markdown
 make install-dev   # creates .venv and installs all dependencies
 ```
@@ -28,13 +28,15 @@ pdf-markdown/
 ├── src/pdf_markdown/      # Library source — one responsibility per module
 │   ├── cli.py             # Typer CLI entrypoint (convert / validate / report)
 │   ├── config.py          # .env / environment settings
-│   ├── discovery.py       # PDF file resolution
-│   ├── fallback_images.py # Page rasterisation via PyMuPDF
-│   ├── marker_runner.py   # Marker subprocess wrapper
-│   ├── models.py          # ConversionResult, RunSummary dataclasses
-│   ├── output.py          # Path helpers and file writing
-│   ├── report.py          # HTML report generation
-│   ├── run_logger.py      # NDJSON run log serialisation
+│   ├── discovery.py        # PDF file resolution
+│   ├── fallback_images.py  # Page rasterisation via PyMuPDF
+│   ├── markdown_metadata.py # embed/extract metadata in Markdown
+│   ├── marker_runner.py    # Marker subprocess wrapper
+│   ├── models.py           # ConversionResult, RunSummary dataclasses
+│   ├── output.py           # Path helpers and file writing
+│   ├── pdf_metadata.py     # PDF metadata extraction
+│   ├── report.py           # HTML report generation
+│   ├── run_logger.py       # NDJSON run log serialisation
 │   └── validation.py      # Output integrity checks
 ├── tests/                 # pytest test suite (mirrors src modules 1-to-1)
 ├── scripts/               # Standalone utility scripts
@@ -61,7 +63,7 @@ pdf-markdown/
 - **Formatter**: `ruff format` (run via `make format`).
 - **Linter**: `ruff check` (run via `make lint`).
 - **Line length**: 100 characters.
-- **Python version target**: 3.11+.
+- **Python version target**: 3.12+.
 - Use `from __future__ import annotations` in every module.
 - Prefer `X | Y` union syntax over `Optional[X]` / `Union[X, Y]`.
 - All public functions and classes must have Google-style docstrings.
@@ -110,6 +112,8 @@ chore: bump ruff to 0.5.0
 ---
 
 ## Releasing a new version
+
+**Before first release:** Create a `release` environment in GitHub (Settings → Environments). Configure PyPI trusted publishing: add the repository to [PyPI's trusted publishers](https://docs.pypi.org/trusted-publishers/) with the workflow `release.yml` and environment `release`.
 
 1. Update `version` in `pyproject.toml`.
 2. Add a release section to `CHANGELOG.md` with the date.

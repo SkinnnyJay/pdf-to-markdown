@@ -9,9 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Initial public release of `pdf-markdown`.
-
 ---
 
 ## [0.1.0] — 2026-03-10
@@ -35,11 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Run logging** — NDJSON `output.log` saved to `data/runs/<run-name>/`.
 - **Fallback image extraction** — when Marker fails, rasterise pages via PyMuPDF and produce a placeholder Markdown with embedded image links.
 - **`.env` / environment variable config** via `config.py`.
-- Full `pytest` test suite with 60+ tests across all modules.
+- Full `pytest` test suite with 70+ tests across all modules.
 - `ruff` lint + format enforcement.
-- `Makefile` with `install`, `install-dev`, `format`, `lint`, `check`, `test`, `test-cov`, `run`, `run-groups`, `run-input`, `dry-run`, `validate`, `validate-strict`, `report`, `report-open`, `report-list`, `clean`, `clean-all`.
-- GitHub Actions CI (`ci.yml`) — test matrix on Python 3.11 + 3.12, lint, coverage upload.
+- `Makefile` with `install`, `install-dev`, `setup-model`, `format`, `lint`, `check`, `test`, `test-cov`, `run`, `run-groups`, `run-input`, `dry-run`, `validate`, `validate-strict`, `report`, `report-open`, `report-list`, `clean`, `clean-all`.
+- GitHub Actions CI (`ci.yml`) — test matrix on Python 3.12–3.14, lint, coverage upload.
 - GitHub Actions Release (`release.yml`) — PyPI trusted publishing on version tag.
 
-[Unreleased]: https://github.com/your-org/pdf-markdown/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-org/pdf-markdown/releases/tag/v0.1.0
+[Unreleased]: https://github.com/SkinnnyJay/pdf-markdown/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/SkinnnyJay/pdf-markdown/releases/tag/v0.1.0
