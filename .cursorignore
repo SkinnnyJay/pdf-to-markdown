@@ -67,6 +67,3 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
-data/
-output/
-pytest-of-*/
