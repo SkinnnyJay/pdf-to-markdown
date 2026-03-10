@@ -1,10 +1,8 @@
 """Output validation — verify converted Markdown files and their assets."""
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 __all__ = ["ValidationIssue", "validate_output_tree", "validate_single_file"]
 
@@ -14,7 +12,7 @@ _IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 class ValidationIssue(TypedDict):
     """A single validation finding."""
 
-    severity: str  # "error" | "warning"
+    severity: Literal["error", "warning"]
     file: str
     message: str
 
@@ -37,27 +35,23 @@ def validate_single_file(md_path: Path, *, strict: bool = False) -> list[Validat
     issues: list[ValidationIssue] = []
     rel = str(md_path)
 
-    # 1. Readability / encoding
     try:
         content = md_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         issues.append({"severity": "error", "file": rel, "message": "File is not valid UTF-8."})
         return issues
 
-    # 2. Non-empty
     if not content.strip():
         issues.append({"severity": "error", "file": rel, "message": "File is empty."})
         return issues
 
-    # 3. Image references
     for match in _IMAGE_REF_RE.finditer(content):
         img_ref = match.group(1)
-        # Skip absolute URLs and data URIs.
         if img_ref.startswith(("http://", "https://", "data:")):
             continue
         img_path = md_path.parent / img_ref
         if not img_path.exists():
-            severity = "error" if strict else "warning"
+            severity: Literal["error", "warning"] = "error" if strict else "warning"
             issues.append(
                 {
                     "severity": severity,

@@ -1,7 +1,5 @@
 """Tests for pdf_markdown.fallback_images — placeholder generation."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pdf_markdown.fallback_images import generate_placeholder_markdown

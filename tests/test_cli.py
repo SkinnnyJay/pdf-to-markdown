@@ -1,9 +1,7 @@
 """Tests for the pdf-markdown CLI (Typer + Rich) via typer.testing."""
 
-from __future__ import annotations
-
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -86,11 +84,6 @@ def test_convert_explicit_input_dry_run(tmp_path: Path, tmp_pdf: Path) -> None:
     assert "sample" in result.output
 
 
-def _make_failed_marker(stdout: str = "", stderr: str = "Marker failed") -> MagicMock:
-    m = MagicMock(return_value=(False, stdout, stderr))
-    return m
-
-
 def test_convert_uses_fallback_on_marker_failure(
     tmp_path: Path,
     tmp_pdf: Path,
@@ -120,6 +113,58 @@ def test_convert_uses_fallback_on_marker_failure(
     assert dest.exists()
     content = dest.read_text()
     assert "# sample" in content
+    assert "pdf-markdown:metadata" in content
+    assert "sample.pdf" in content
+
+
+def test_convert_with_workers_flag(tmp_path: Path, tmp_pdf: Path) -> None:
+    """--workers 2 runs parallel conversion; worker_id appears in results."""
+    output_dir = tmp_path / "out"
+    with (
+        patch("pdf_markdown.cli.run_marker", return_value=(False, "", "marker error")),
+        patch("pdf_markdown.cli.extract_images", return_value=[]),
+    ):
+        result = runner.invoke(
+            app,
+            [
+                "convert",
+                "--input",
+                str(tmp_pdf),
+                "--output",
+                str(output_dir),
+                "--workers",
+                "2",
+            ],
+        )
+    assert result.exit_code == 1
+    assert "Workers: 2" in result.output
+
+
+def test_convert_with_model_path(tmp_path: Path, tmp_pdf: Path) -> None:
+    """--model-path is passed through to Marker."""
+    output_dir = tmp_path / "out"
+    model_dir = tmp_path / "hf_cache"
+    model_dir.mkdir()
+    with (
+        patch("pdf_markdown.cli.run_marker") as mock_run,
+        patch("pdf_markdown.cli.extract_images", return_value=[]),
+    ):
+        mock_run.return_value = (False, "", "marker error")
+        runner.invoke(
+            app,
+            [
+                "convert",
+                "--input",
+                str(tmp_pdf),
+                "--output",
+                str(output_dir),
+                "--model-path",
+                str(model_dir),
+            ],
+        )
+    mock_run.assert_called()
+    call_kwargs = mock_run.call_args[1]
+    assert call_kwargs.get("model_path") == model_dir
 
 
 # ── validate subcommand ───────────────────────────────────────────────────────

@@ -1,10 +1,9 @@
 """pdf-markdown CLI — convert PDFs to Markdown using Marker with image fallback."""
 
-from __future__ import annotations
-
 import tempfile
 import time
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -23,11 +22,16 @@ from pdf_markdown.discovery import (
     collect_pdfs_from_inputs,
 )
 from pdf_markdown.fallback_images import extract_images, generate_placeholder_markdown
+from pdf_markdown.markdown_metadata import embed_metadata
 from pdf_markdown.marker_runner import find_marker_output, run_marker
 from pdf_markdown.models import ConversionResult, RunSummary
 from pdf_markdown.output import assets_dir, copy_marker_output, destination_md, write_markdown
+from pdf_markdown.pdf_metadata import get_pdf_metadata
 from pdf_markdown.report import generate_report
 from pdf_markdown.run_logger import make_run_name, read_run_log, write_run_log
+from pdf_markdown.validation import validate_output_tree
+
+_SECS_PER_MINUTE = 60
 
 app = typer.Typer(
     name="pdf-markdown",
@@ -48,7 +52,7 @@ console = Console(stderr=True)
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"pdf-markdown {__version__}")
-        raise typer.Exit()
+        raise typer.Exit
 
 
 @app.callback()
@@ -64,7 +68,7 @@ def _global(
         ),
     ] = None,
 ) -> None:
-    pass
+    """Entry point for app-level flags (e.g. --version)."""
 
 
 # ── convert ───────────────────────────────────────────────────────────────────
@@ -121,6 +125,15 @@ def convert(
             help="Root directory where converted Markdown is written.",
         ),
     ] = Path("transformed"),
+    workers: Annotated[
+        int,
+        typer.Option(
+            "--workers",
+            "-w",
+            min=1,
+            help="Number of parallel workers. Default from PDF_MARKDOWN_WORKERS (1).",
+        ),
+    ] = None,
     batch_multiplier: Annotated[
         int,
         typer.Option(
@@ -128,6 +141,7 @@ def convert(
             help="Marker batch multiplier. Higher values use more RAM/VRAM.",
             min=1,
             max=16,
+            hidden=True,
         ),
     ] = 2,
     langs: Annotated[
@@ -135,6 +149,7 @@ def convert(
         typer.Option(
             "--langs",
             help="Comma-separated language hints for Marker (e.g. English,German).",
+            hidden=True,
         ),
     ] = None,
     timeout: Annotated[
@@ -145,6 +160,17 @@ def convert(
             min=10,
         ),
     ] = 600,
+    model_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--model-path",
+            help="Path to HuggingFace model cache. Overrides PDF_MARKDOWN_MODEL_PATH.",
+            resolve_path=True,
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+        ),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -195,26 +221,40 @@ def convert(
 
     if not pdf_pairs:
         console.print("[yellow]No PDFs found to process.[/yellow]")
-        raise typer.Exit()
+        raise typer.Exit
 
     if dry_run:
         _print_discovery_table(pdf_pairs, output)
-        raise typer.Exit()
+        raise typer.Exit
 
     cfg = Settings()
     name = run_name or make_run_name("convert")
+    num_workers = workers if workers is not None else cfg.workers
+    mp = model_path or cfg.model_path
 
+    model_line = f"  Model: [bold]{mp!s}[/bold]" if mp else ""
+    run_info = (
+        f"[dim]Run name: [bold]{name}[/bold]  Workers: [bold]{num_workers}[/bold]{model_line}[/dim]"
+    )
     console.print(
         Panel(
             f"[bold]pdf-markdown[/bold]  v{__version__}\n"
-            f"[dim]Found [bold]{len(pdf_pairs)}[/bold] PDF(s) → [bold]{output}[/bold][/dim]\n"
-            f"[dim]Run name: [bold]{name}[/bold][/dim]",
+            f"[dim]Found [bold]{len(pdf_pairs)}[/bold] PDF(s) → [bold]{output!s}[/bold][/dim]\n"
+            f"{run_info}",
             border_style="cyan",
-        )
+        ),
     )
 
     started = datetime.now(tz=UTC)
-    results = _run_conversions(pdf_pairs, output, batch_multiplier, langs, timeout)
+    results = _run_conversions(
+        pdf_pairs,
+        output,
+        batch_multiplier=batch_multiplier,
+        langs=langs,
+        timeout=timeout,
+        workers=num_workers,
+        model_path=mp,
+    )
     finished = datetime.now(tz=UTC)
 
     summary = RunSummary(
@@ -225,18 +265,16 @@ def convert(
         log_path=cfg.log_path(name),
     )
 
-    # Persist run log
     write_run_log(summary, summary.log_path)
-    console.print(f"[dim]Run log saved → {summary.log_path}[/dim]")
+    console.print(f"[dim]Run log saved → {summary.log_path!s}[/dim]")
 
-    # Generate HTML report
     if html_report:
         rpt_path = cfg.report_path(name)
-        html = generate_report(summary, title=cfg.report_title)
+        html_str = generate_report(summary, title=cfg.report_title)
         rpt_path.parent.mkdir(parents=True, exist_ok=True)
-        rpt_path.write_text(html, encoding="utf-8")
+        rpt_path.write_text(html_str, encoding="utf-8")
         summary.report_path = rpt_path
-        console.print(f"[dim]HTML report → {rpt_path}[/dim]")
+        console.print(f"[dim]HTML report → {rpt_path!s}[/dim]")
         if cfg.open_report:
             webbrowser.open(rpt_path.as_uri())
 
@@ -281,12 +319,10 @@ def validate(
 
     Exits with code 1 if any errors are found.
     """
-    from pdf_markdown.validation import validate_output_tree
-
     issues = validate_output_tree(output, strict=strict)
 
     if not issues:
-        console.print(f"[green]✓ All files valid in {output}[/green]")
+        console.print(f"[green]✓ All files valid in {output!s}[/green]")
         return
 
     table = Table(title=f"Validation Issues in {output}", show_lines=True)
@@ -309,8 +345,7 @@ def validate(
     if errors:
         console.print(f"\n[red]Found {len(errors)} error(s), {len(warnings)} warning(s).[/red]")
         raise typer.Exit(code=1)
-    else:
-        console.print(f"\n[yellow]Found {len(warnings)} warning(s) (no errors).[/yellow]")
+    console.print(f"\n[yellow]Found {len(warnings)} warning(s) (no errors).[/yellow]")
 
 
 # ── report ────────────────────────────────────────────────────────────────────
@@ -384,21 +419,19 @@ def report(
 
     if list_runs:
         _print_run_list(cfg)
-        raise typer.Exit()
+        raise typer.Exit
 
-    # Resolve log path
     log_path: Path | None = log
     if log_path is None and run_name:
         log_path = cfg.log_path(run_name)
     elif log_path is None:
-        # Default: most recent run
         log_path = _latest_log(cfg)
         if log_path is None:
             console.print(
-                "[yellow]No runs found in data directory. Run a conversion first.[/yellow]"
+                "[yellow]No runs found in data directory. Run a conversion first.[/yellow]",
             )
-            raise typer.Exit()
-        console.print(f"[dim]No run specified — using most recent: {log_path}[/dim]")
+            raise typer.Exit
+        console.print(f"[dim]No run specified — using most recent: {log_path!s}[/dim]")
 
     try:
         summary = read_run_log(log_path)
@@ -413,7 +446,7 @@ def report(
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(html_content, encoding="utf-8")
 
-    console.print(f"[green]✓ Report written → {dest}[/green]")
+    console.print(f"[green]✓ Report written → {dest!s}[/green]")
 
     if open_browser or cfg.open_report:
         webbrowser.open(dest.as_uri())
@@ -454,12 +487,30 @@ def _collect_pdfs(
 def _run_conversions(
     pdf_pairs: list[tuple[str, Path]],
     output: Path,
+    *,
     batch_multiplier: int,
     langs: str | None,
     timeout: int,
+    workers: int = 1,
+    model_path: Path | None = None,
 ) -> list[ConversionResult]:
-    """Convert all PDFs, showing a Rich progress bar."""
+    """Convert all PDFs, optionally in parallel, with a Rich progress bar."""
     results: list[ConversionResult] = []
+
+    def _convert_with_worker(
+        item: tuple[int, tuple[str, Path]],
+    ) -> ConversionResult:
+        worker_id, (group, pdf) = item
+        return _convert_one(
+            group=group,
+            pdf=pdf,
+            output=output,
+            batch_multiplier=batch_multiplier,
+            langs=langs,
+            timeout=timeout,
+            model_path=model_path,
+            worker_id=worker_id if workers > 1 else None,
+        )
 
     with Progress(
         SpinnerColumn(),
@@ -471,19 +522,28 @@ def _run_conversions(
     ) as progress:
         task = progress.add_task("[cyan]Converting…", total=len(pdf_pairs))
 
-        for group, pdf in pdf_pairs:
-            progress.update(task, description=f"[cyan]{group}/{pdf.name}")
-            result = _convert_one(
-                group=group,
-                pdf=pdf,
-                output=output,
-                batch_multiplier=batch_multiplier,
-                langs=langs,
-                timeout=timeout,
-            )
-            results.append(result)
-            progress.advance(task)
+        if workers <= 1:
+            for group, pdf in pdf_pairs:
+                progress.update(task, description=f"[cyan]{group}/{pdf.name}")
+                result = _convert_with_worker((1, (group, pdf)))
+                results.append(result)
+                progress.advance(task)
+        else:
+            indexed = [(i % workers + 1, pair) for i, pair in enumerate(pdf_pairs)]
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {executor.submit(_convert_with_worker, item): item for item in indexed}
+                for future in as_completed(futures):
+                    worker_id, (group, pdf) = futures[future]
+                    results.append(future.result())
+                    progress.update(
+                        task,
+                        description=f"[cyan]worker {worker_id}: {group}/{pdf.name}",
+                        advance=1,
+                    )
 
+    # Preserve input order for summary table and logs
+    order_map = {(g, str(p)): i for i, (g, p) in enumerate(pdf_pairs)}
+    results.sort(key=lambda r: order_map.get((r.group, str(r.pdf)), 0))
     return results
 
 
@@ -495,6 +555,8 @@ def _convert_one(
     batch_multiplier: int,
     langs: str | None,
     timeout: int,
+    model_path: Path | None = None,
+    worker_id: int | None = None,
 ) -> ConversionResult:
     """Run Marker for one PDF; fall back to image extraction on failure."""
     dest = destination_md(output, group, pdf)
@@ -513,12 +575,13 @@ def _convert_one(
             batch_multiplier=batch_multiplier,
             langs=langs,
             timeout=timeout,
+            model_path=model_path,
         )
 
         if success:
             marker_md = find_marker_output(tmp_path, pdf.stem)
             if marker_md:
-                copy_marker_output(marker_md, dest)
+                copy_marker_output(marker_md, dest, pdf)
                 return ConversionResult(
                     pdf=pdf,
                     group=group,
@@ -527,13 +590,13 @@ def _convert_one(
                     stdout=stdout,
                     stderr=stderr,
                     duration_s=time.monotonic() - t0,
+                    worker_id=worker_id,
                 )
             success = False
             error = "Marker exited 0 but produced no .md output."
         else:
             error = stderr or "Marker returned a non-zero exit code."
 
-    # Fallback: rasterise pages to PNGs and produce a placeholder Markdown.
     try:
         images = extract_images(pdf, a_dir)
     except Exception as exc:  # noqa: BLE001
@@ -546,7 +609,9 @@ def _convert_one(
         images=images,
         error_msg=error,
     )
-    write_markdown(dest, md_content)
+    metadata = get_pdf_metadata(pdf)
+    full_content = embed_metadata(metadata) + md_content
+    write_markdown(dest, full_content)
 
     return ConversionResult(
         pdf=pdf,
@@ -559,6 +624,7 @@ def _convert_one(
         error=error,
         extracted_images=images,
         duration_s=time.monotonic() - t0,
+        worker_id=worker_id,
     )
 
 
@@ -567,53 +633,69 @@ def _print_discovery_table(pdf_pairs: list[tuple[str, Path]], output: Path) -> N
     typer.echo("-" * 120)
     for group, pdf in pdf_pairs:
         dest = destination_md(output, group, pdf)
-        typer.echo(f"{group:<12}  {str(pdf):<60}  {dest}")
+        typer.echo(f"{group:<12}  {pdf!s:<60}  {dest!s}")
     typer.echo(f"\nTotal: {len(pdf_pairs)} PDF(s) would be processed.")
 
 
 def _print_summary(results: list[ConversionResult]) -> None:
     ok = [r for r in results if r.success]
     failed = [r for r in results if not r.success]
+    show_worker = any(r.worker_id is not None for r in results)
 
     table = Table(title="Conversion Summary", show_lines=True)
     table.add_column("Status", style="bold", no_wrap=True)
+    if show_worker:
+        table.add_column("Worker", style="dim", no_wrap=True)
     table.add_column("Group", style="cyan", no_wrap=True)
     table.add_column("File", style="white")
     table.add_column("Output", style="dim")
     table.add_column("Duration", style="dim", no_wrap=True)
 
+    def _row(r: ConversionResult, status: str) -> list[str]:
+        base = [status, r.group, r.pdf.name, str(r.output_md or ""), _fmt_dur(r.duration_s)]
+        if show_worker:
+            wid = str(r.worker_id or "—")
+            return [
+                status,
+                wid,
+                r.group,
+                r.pdf.name,
+                str(r.output_md or ""),
+                _fmt_dur(r.duration_s),
+            ]
+        return base
+
     for r in ok:
-        table.add_row(
-            "[green]✓ OK[/green]",
-            r.group,
-            r.pdf.name,
-            str(r.output_md or ""),
-            _fmt_dur(r.duration_s),
-        )
+        row = _row(r, "[green]✓ OK[/green]")
+        table.add_row(*row)
     for r in failed:
         label = "[yellow]⚠ fallback[/yellow]" if r.is_fallback else "[red]✗ failed[/red]"
-        table.add_row(label, r.group, r.pdf.name, str(r.output_md or ""), _fmt_dur(r.duration_s))
+        row = _row(r, label)
+        table.add_row(*row)
         if r.error:
-            table.add_row("", "", f"[dim]{r.error}[/dim]", "", "")
+            pad = ["", ""] if show_worker else [""]
+            table.add_row("", *pad, f"[dim]{r.error}[/dim]", "", "")
 
     console.print(table)
     console.print(
         f"\n[bold]Total:[/bold] {len(results)}  "
         f"[green]OK: {len(ok)}[/green]  "
-        f"[yellow]Fallback/Failed: {len(failed)}[/yellow]\n"
+        f"[yellow]Fallback/Failed: {len(failed)}[/yellow]\n",
     )
 
 
 def _fmt_dur(seconds: float | None) -> str:
     if seconds is None:
         return "—"
-    return f"{seconds:.1f}s" if seconds < 60 else f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    if seconds < _SECS_PER_MINUTE:
+        return f"{seconds:.1f}s"
+    return f"{int(seconds // _SECS_PER_MINUTE)}m {int(seconds % _SECS_PER_MINUTE)}s"
 
 
 def _print_run_list(cfg: Settings) -> None:
     runs_dir = cfg.data_dir / cfg.log_subdir
     if not runs_dir.is_dir():
-        console.print(f"[yellow]No data directory found at {runs_dir}[/yellow]")
+        console.print(f"[yellow]No data directory found at {runs_dir!s}[/yellow]")
         return
 
     logs = sorted(runs_dir.rglob("output.log"), reverse=True)

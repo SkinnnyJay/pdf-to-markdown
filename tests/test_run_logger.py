@@ -1,7 +1,5 @@
 """Tests for pdf_markdown.run_logger."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -100,8 +98,7 @@ def test_make_run_name_format() -> None:
 
 def test_make_run_name_no_prefix() -> None:
     name = make_run_name()
-    # Should look like YYYY-MM-DDTHH-MM-SS
-    assert name[4] == "-"
+    assert name[4] == "-" and name[7] == "-"  # YYYY-MM-DD…
 
 
 def test_metrics(tmp_path: Path) -> None:
@@ -112,3 +109,24 @@ def test_metrics(tmp_path: Path) -> None:
     assert summary.failed_count == 0
     assert summary.success_rate == pytest.approx(50.0)
     assert summary.duration_s == pytest.approx(16.0)
+
+
+def test_worker_id_round_trip(tmp_path: Path) -> None:
+    """worker_id is persisted and restored from log."""
+    result = ConversionResult(
+        pdf=Path("/src/1880/doc.pdf"),
+        group="1880",
+        success=True,
+        output_md=tmp_path / "1880" / "doc.md",
+        worker_id=2,
+    )
+    summary = RunSummary(
+        run_name="parallel-run",
+        started_at=datetime(2026, 3, 9, 12, 0, 0, tzinfo=UTC),
+        finished_at=datetime(2026, 3, 9, 12, 0, 5, tzinfo=UTC),
+        results=[result],
+        log_path=tmp_path / "output.log",
+    )
+    write_run_log(summary, summary.log_path)
+    loaded = read_run_log(summary.log_path)
+    assert loaded.results[0].worker_id == 2

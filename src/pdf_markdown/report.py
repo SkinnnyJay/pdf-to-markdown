@@ -1,9 +1,6 @@
 """HTML report generator — produces a rich, self-contained report from a RunSummary."""
 
-from __future__ import annotations
-
 import html
-from pathlib import Path
 
 from pdf_markdown.models import ConversionResult, RunSummary
 
@@ -23,6 +20,11 @@ _STATUS_ICON: dict[str, str] = {
 }
 
 
+_SECS_PER_MINUTE = 60
+_RATE_GREEN_THRESHOLD = 90
+_RATE_YELLOW_THRESHOLD = 60
+
+
 def _h(value: object) -> str:
     """HTML-escape a value."""
     return html.escape(str(value))
@@ -31,9 +33,9 @@ def _h(value: object) -> str:
 def _fmt_duration(seconds: float | None) -> str:
     if seconds is None:
         return "—"
-    if seconds < 60:
+    if seconds < _SECS_PER_MINUTE:
         return f"{seconds:.1f}s"
-    m, s = divmod(int(seconds), 60)
+    m, s = divmod(int(seconds), _SECS_PER_MINUTE)
     return f"{m}m {s}s"
 
 
@@ -41,9 +43,9 @@ def _fmt_ts(dt: object) -> str:
     if dt is None:
         return "—"
     try:
-        local = dt.astimezone()  # convert UTC → local for display
+        local = dt.astimezone()  # type: ignore[union-attr]
         return local.strftime("%Y-%m-%d %H:%M:%S %Z")
-    except Exception:
+    except (AttributeError, ValueError, OSError):
         return str(dt)
 
 
@@ -51,9 +53,9 @@ def _summary_widgets(summary: RunSummary) -> str:
     """Render the four KPI cards at the top of the report."""
     rate_colour = (
         "text-green-600"
-        if summary.success_rate >= 90
+        if summary.success_rate >= _RATE_GREEN_THRESHOLD
         else "text-yellow-600"
-        if summary.success_rate >= 60
+        if summary.success_rate >= _RATE_YELLOW_THRESHOLD
         else "text-red-600"
     )
 
@@ -80,9 +82,10 @@ def _summary_widgets(summary: RunSummary) -> str:
     </div>"""
 
 
-def _result_rows(results: list[ConversionResult], log_path: Path | None) -> str:
+def _result_rows(results: list[ConversionResult], show_worker: bool = False) -> str:
     """Render one ``<tr>`` per result, with an expandable error log panel."""
     rows: list[str] = []
+    colspan = 7 if show_worker else 6
 
     for i, r in enumerate(results):
         status = r.status_label
@@ -111,7 +114,7 @@ def _result_rows(results: list[ConversionResult], log_path: Path | None) -> str:
             log_content = _h(r.log_text)
             log_panel = f"""
         <tr id="{log_id}" class="hidden bg-gray-50">
-          <td colspan="6" class="px-4 py-3">
+          <td colspan="{colspan}" class="px-4 py-3">
             <div class="text-xs font-mono text-gray-700 bg-gray-100 rounded-lg p-4
                         overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto
                         border border-gray-200">{log_content}</div>
@@ -120,13 +123,20 @@ def _result_rows(results: list[ConversionResult], log_path: Path | None) -> str:
 
         dur_cell = _fmt_duration(r.duration_s)
         imgs_cell = str(len(r.extracted_images)) if r.extracted_images else "—"
+        worker_cell = str(r.worker_id) if r.worker_id is not None else "—"
+
+        worker_td = (
+            f'<td class="px-4 py-3 text-sm text-gray-500 tabular-nums">{worker_cell}</td>'
+            if show_worker
+            else ""
+        )
 
         rows.append(f"""
         <tr id="{row_id}" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
           <td class="px-4 py-3">
             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs
                          font-semibold {badge_cls}">{icon} {status}</span>
-          </td>
+          </td>{worker_td}
           <td class="px-4 py-3 text-sm font-medium text-gray-700">{_h(r.group)}</td>
           <td class="px-4 py-3 text-sm text-gray-600 break-all">
             {_h(r.pdf.name)}{expand_btn}
@@ -148,12 +158,10 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
     Args:
         summary: Populated :class:`~pdf_markdown.models.RunSummary`.
         title: Browser title and ``<h1>`` heading for the report.
-
-    Returns:
-        HTML string ready to write to a ``.html`` file.
     """
     widgets = _summary_widgets(summary)
-    rows = _result_rows(summary.results, summary.log_path)
+    show_worker = any(r.worker_id is not None for r in summary.results)
+    rows = _result_rows(summary.results, show_worker=show_worker)
 
     log_path_link = (
         f'<a href="{_h(summary.log_path)}" class="underline text-blue-400">'
@@ -161,6 +169,15 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
         if summary.log_path
         else "—"
     )
+
+    worker_header = (
+        '<th class="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer '
+        'select-none sort-icon" onclick="sortTable(1)">Worker</th>'
+        if show_worker
+        else ""
+    )
+    # When Worker column exists, Group/PDF/Output/Duration/Images shift by 1
+    sort_offset = 1 if show_worker else 0
 
     started = _fmt_ts(summary.started_at)
     finished = _fmt_ts(summary.finished_at)
@@ -174,10 +191,7 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{_h(title)} — {_h(summary.run_name)}</title>
 
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Alpine.js for lightweight interactivity -->
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <style>
@@ -190,7 +204,6 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
 
 <body class="bg-gray-50 text-gray-900 min-h-screen font-sans antialiased">
 
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
   <header class="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
     <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
       <div>
@@ -208,26 +221,21 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
 
   <main class="max-w-7xl mx-auto px-6 py-8">
 
-    <!-- ── Summary widgets ──────────────────────────────────────────────── -->
     {widgets}
 
-    <!-- ── Run metadata strip ───────────────────────────────────────────── -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-8
                 flex flex-wrap gap-x-8 gap-y-2 text-sm text-gray-600">
       <span><strong class="text-gray-800">Groups:</strong> {groups_str}</span>
       <span><strong class="text-gray-800">Log:</strong> {log_path_link}</span>
     </div>
 
-    <!-- ── Results table ────────────────────────────────────────────────── -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
          x-data="sortableTable()">
 
-      <!-- Toolbar -->
       <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4
                   border-b border-gray-100">
         <h2 class="text-base font-semibold text-gray-800">Conversion Results</h2>
         <div class="flex items-center gap-3">
-          <!-- Filter by status -->
           <select id="statusFilter"
                   class="text-sm border border-gray-200 rounded-lg px-3 py-1.5
                          bg-gray-50 text-gray-700 focus:outline-none focus:ring-2
@@ -238,7 +246,6 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
             <option value="fallback">⚠ Fallback</option>
             <option value="failed">✗ Failed</option>
           </select>
-          <!-- Search -->
           <input id="searchBox" type="text" placeholder="Search…"
                  class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 w-48
                         bg-gray-50 text-gray-700 focus:outline-none focus:ring-2
@@ -247,22 +254,22 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
         </div>
       </div>
 
-      <!-- Table -->
       <div class="overflow-x-auto">
         <table id="resultsTable" class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer
                          select-none sort-icon" onclick="sortTable(0)">Status</th>
+              {worker_header}
               <th class="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer
-                         select-none sort-icon" onclick="sortTable(1)">Group</th>
+                         select-none sort-icon" onclick="sortTable({1 + sort_offset})">Group</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer
-                         select-none sort-icon" onclick="sortTable(2)">PDF File</th>
+                         select-none sort-icon" onclick="sortTable({2 + sort_offset})">PDF File</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600">Output</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer
-                         select-none sort-icon" onclick="sortTable(4)">Duration</th>
+                         select-none sort-icon" onclick="sortTable({4 + sort_offset})">Duration</th>
               <th class="px-4 py-3 text-left font-semibold text-gray-600 cursor-pointer
-                         select-none sort-icon" onclick="sortTable(5)">Images</th>
+                         select-none sort-icon" onclick="sortTable({5 + sort_offset})">Images</th>
             </tr>
           </thead>
           <tbody id="tableBody">
@@ -271,7 +278,6 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
         </table>
       </div>
 
-      <!-- Footer count -->
       <div class="px-5 py-3 border-t border-gray-100 text-xs text-gray-400 text-right">
         <span id="visibleCount"></span>
       </div>
@@ -279,12 +285,10 @@ def generate_report(summary: RunSummary, *, title: str = "PDF Conversion Report"
 
   </main>
 
-  <!-- ── Footer ─────────────────────────────────────────────────────────── -->
   <footer class="max-w-7xl mx-auto px-6 py-6 text-xs text-gray-400 text-center">
     Generated by <strong>pdf-markdown</strong> &mdash; run <code>{_h(summary.run_name)}</code>
   </footer>
 
-  <!-- ── JavaScript ─────────────────────────────────────────────────────── -->
   <script>
     // ── Log panel toggle ────────────────────────────────────────────────────
     function toggleLog(id) {{

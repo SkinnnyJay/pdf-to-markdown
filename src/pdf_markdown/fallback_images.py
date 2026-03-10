@@ -1,8 +1,11 @@
 """Fallback image extraction — rasterise PDF pages when Marker conversion fails."""
 
-from __future__ import annotations
-
 from pathlib import Path
+
+try:
+    import fitz  # pymupdf
+except ImportError:
+    fitz = None  # type: ignore[assignment]
 
 
 def extract_images(
@@ -13,7 +16,7 @@ def extract_images(
 ) -> list[Path]:
     """Rasterise every page of *pdf* to PNG files inside *assets_dir*.
 
-    Uses ``pymupdf`` (fitz) which is bundled as a dependency.  Each page is
+    Uses ``pymupdf`` (fitz) which is bundled as a dependency. Each page is
     saved as ``<stem>-p<N>.png`` (1-indexed).
 
     Args:
@@ -24,12 +27,10 @@ def extract_images(
     Returns:
         List of paths to the created PNG files.
     """
-    try:
-        import fitz  # pymupdf
-    except ImportError as exc:
+    if fitz is None:
         raise RuntimeError(
-            "pymupdf is required for image extraction. Install with: pip install pymupdf"
-        ) from exc
+            "pymupdf is required for image extraction. Install with: pip install pymupdf",
+        )
 
     assets_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(str(pdf))
@@ -52,7 +53,7 @@ def generate_placeholder_markdown(
     images: list[Path],
     error_msg: str,
 ) -> str:
-    """Build a markdown string that documents the failure and embeds image links.
+    """Build a Markdown string that documents the failure and embeds image links.
 
     Args:
         pdf: Original PDF path.

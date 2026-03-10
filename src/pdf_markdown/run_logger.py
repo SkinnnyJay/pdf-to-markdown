@@ -1,14 +1,12 @@
 """Run logger — write structured per-run logs to the data directory."""
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 from pdf_markdown.models import ConversionResult, RunSummary
 
-__all__ = ["write_run_log", "read_run_log"]
+__all__ = ["make_run_name", "read_run_log", "write_run_log"]
 
 _LOG_VERSION = "1"
 
@@ -16,12 +14,8 @@ _LOG_VERSION = "1"
 def write_run_log(summary: RunSummary, log_path: Path) -> None:
     """Serialise *summary* to a structured JSON-lines log file.
 
-    The file format is newline-delimited JSON (NDJSON):
-    * Line 1: run header (metadata + aggregate stats).
-    * Lines 2…N: one JSON object per :class:`~pdf_markdown.models.ConversionResult`.
-
-    This makes the log both human-readable (each line is valid JSON) and
-    easy to stream-parse without loading the entire file into memory.
+    Format is newline-delimited JSON (NDJSON): line 1 is the run header;
+    subsequent lines are one object per :class:`~pdf_markdown.models.ConversionResult`.
 
     Args:
         summary: The completed :class:`RunSummary` to persist.
@@ -30,7 +24,6 @@ def write_run_log(summary: RunSummary, log_path: Path) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     with log_path.open("w", encoding="utf-8") as fh:
-        # Header line
         header = {
             "_type": "run_header",
             "_version": _LOG_VERSION,
@@ -46,7 +39,6 @@ def write_run_log(summary: RunSummary, log_path: Path) -> None:
         }
         fh.write(json.dumps(header) + "\n")
 
-        # One line per result
         for r in summary.results:
             entry = {
                 "_type": "result",
@@ -60,6 +52,7 @@ def write_run_log(summary: RunSummary, log_path: Path) -> None:
                 "stderr": r.stderr,
                 "duration_s": r.duration_s,
                 "extracted_images": [str(p) for p in r.extracted_images],
+                "worker_id": r.worker_id,
             }
             fh.write(json.dumps(entry) + "\n")
 
@@ -110,17 +103,17 @@ def read_run_log(log_path: Path) -> RunSummary:
                 stderr=entry.get("stderr", ""),
                 duration_s=entry.get("duration_s"),
                 extracted_images=[Path(p) for p in entry.get("extracted_images", [])],
+                worker_id=entry.get("worker_id"),
             )
         )
 
-    summary = RunSummary(
+    return RunSummary(
         run_name=header["run_name"],
         started_at=started_at,
         finished_at=finished_at,
         results=results,
         log_path=log_path,
     )
-    return summary
 
 
 def make_run_name(prefix: str = "") -> str:

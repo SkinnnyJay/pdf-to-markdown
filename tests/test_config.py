@@ -1,7 +1,5 @@
 """Tests for pdf_markdown.config."""
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 
@@ -16,6 +14,8 @@ def test_defaults() -> None:
     assert s.log_subdir == "runs"
     assert s.report_title == "PDF Conversion Report"
     assert s.open_report is False
+    assert s.workers == 1
+    assert s.model_path is None
 
 
 def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,3 +58,17 @@ def test_report_path(tmp_path: Path) -> None:
     s = Settings(dotenv=Path("/nonexistent/.env"))
     s.data_dir = tmp_path
     assert s.report_path("r1") == tmp_path / "runs" / "r1" / "report.html"
+
+
+def test_workers_and_model_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PDF_MARKDOWN_WORKERS", "4")
+    monkeypatch.setenv("PDF_MARKDOWN_MODEL_PATH", str(tmp_path))
+    s = Settings(dotenv=Path("/nonexistent/.env"))
+    assert s.workers == 4
+    assert s.model_path == tmp_path
+
+
+def test_workers_invalid_falls_back_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PDF_MARKDOWN_WORKERS", "invalid")
+    s = Settings(dotenv=Path("/nonexistent/.env"))
+    assert s.workers == 1

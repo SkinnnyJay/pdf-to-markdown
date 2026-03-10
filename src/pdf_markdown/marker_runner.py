@@ -1,31 +1,30 @@
 """Marker invocation wrapper — convert a single PDF to Markdown via the marker CLI."""
 
-from __future__ import annotations
-
+import os
 import subprocess
 from pathlib import Path
 
-from pdf_markdown.models import ConversionResult
-
-__all__ = ["ConversionResult", "find_marker_output", "run_marker"]
+__all__ = ["find_marker_output", "run_marker"]
 
 
 def run_marker(
     pdf: Path,
     output_dir: Path,
     *,
-    batch_multiplier: int = 2,
-    langs: str | None = None,
+    batch_multiplier: int = 2,  # noqa: ARG001 — reserved for older marker versions
+    langs: str | None = None,  # noqa: ARG001 — reserved for older marker versions
     timeout: int = 600,
+    model_path: Path | None = None,
 ) -> tuple[bool, str, str]:
     """Run ``marker_single`` on *pdf* and write markdown to *output_dir*.
 
     Args:
         pdf: Path to the source PDF.
         output_dir: Directory where Marker should write its output.
-        batch_multiplier: Marker batch multiplier (controls GPU/CPU usage).
-        langs: Comma-separated language hints passed to Marker (e.g. ``"English"``).
+        batch_multiplier: Unused — kept for API compatibility with older marker versions.
+        langs: Unused — kept for API compatibility with older marker versions.
         timeout: Maximum seconds to wait for the subprocess.
+        model_path: Optional path for HuggingFace model cache (sets HF_HOME in subprocess env).
 
     Returns:
         ``(success, stdout, stderr)`` tuple.
@@ -33,12 +32,13 @@ def run_marker(
     cmd: list[str] = [
         "marker_single",
         str(pdf),
+        "--output_dir",
         str(output_dir),
-        "--batch_multiplier",
-        str(batch_multiplier),
     ]
-    if langs:
-        cmd += ["--langs", langs]
+
+    env = os.environ.copy()
+    if model_path is not None:
+        env["HF_HOME"] = str(model_path)
 
     try:
         proc = subprocess.run(
@@ -46,6 +46,8 @@ def run_marker(
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
+            env=env,
         )
         return proc.returncode == 0, proc.stdout, proc.stderr
     except FileNotFoundError:
@@ -61,7 +63,8 @@ def run_marker(
 def find_marker_output(output_dir: Path, stem: str) -> Path | None:
     """Locate the markdown file Marker wrote for *stem* inside *output_dir*.
 
-    Marker writes ``<output_dir>/<stem>/<stem>.md`` by default.
+    Marker writes ``<output_dir>/<stem>/<stem>.md`` by default; falls back to
+    returning the first ``.md`` found anywhere in the tree.
 
     Args:
         output_dir: Directory passed to Marker.
@@ -73,6 +76,4 @@ def find_marker_output(output_dir: Path, stem: str) -> Path | None:
     candidate = output_dir / stem / f"{stem}.md"
     if candidate.exists():
         return candidate
-
-    # Fallback: return the first .md found anywhere in the output tree.
     return next(output_dir.rglob("*.md"), None)

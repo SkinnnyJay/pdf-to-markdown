@@ -1,7 +1,5 @@
 """PDF discovery helpers — resolve PDFs from folder trees or explicit paths."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 
@@ -23,8 +21,7 @@ def collect_pdfs_from_folder(folder: Path) -> list[tuple[str, Path]]:
     for group_dir in sorted(folder.iterdir()):
         if not group_dir.is_dir():
             continue
-        for pdf in sorted(group_dir.glob("*.pdf")):
-            results.append((group_dir.name, pdf))
+        results.extend((group_dir.name, pdf) for pdf in sorted(group_dir.glob("*.pdf")))
     return results
 
 
@@ -49,10 +46,9 @@ def collect_pdfs_from_groups(
         group_dir = folder / group
         if not group_dir.is_dir():
             raise FileNotFoundError(
-                f"Group folder not found: {group_dir}. Check --source and --groups arguments."
+                f"Group folder not found: {group_dir}. Check --source and --groups arguments.",
             )
-        for pdf in sorted(group_dir.glob("*.pdf")):
-            results.append((group, pdf))
+        results.extend((group, pdf) for pdf in sorted(group_dir.glob("*.pdf")))
     return results
 
 

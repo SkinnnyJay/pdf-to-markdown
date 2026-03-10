@@ -1,7 +1,5 @@
 """Domain models shared across pdf-markdown modules."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,17 +11,10 @@ __all__ = ["ConversionResult", "RunSummary"]
 class ConversionResult:
     """Outcome of a single Marker conversion attempt.
 
-    Attributes:
-        pdf: Path to the source PDF file.
-        group: Group name (sub-folder, e.g. ``"1880"``).
-        success: ``True`` if Marker produced usable Markdown output.
-        output_md: Path to the written ``.md`` file (present even on fallback).
-        stdout: Captured stdout from the Marker subprocess.
-        stderr: Captured stderr from the Marker subprocess.
-        error: Human-readable error description when ``success`` is ``False``.
-        extracted_images: Images extracted during fallback (empty on success).
-        duration_s: Wall-clock seconds the conversion took (``None`` if unknown).
-        is_fallback: ``True`` when the result came from the image-extraction fallback.
+    ``output_md`` is set even on fallback — it points to the placeholder file.
+    ``is_fallback`` distinguishes image-extraction fallbacks from hard failures
+    where no output was produced at all.
+    ``worker_id`` identifies which parallel worker processed this file (1-based).
     """
 
     pdf: Path
@@ -36,17 +27,18 @@ class ConversionResult:
     extracted_images: list[Path] = field(default_factory=list)
     duration_s: float | None = None
     is_fallback: bool = False
+    worker_id: int | None = None
 
     @property
     def status_label(self) -> str:
-        """Human-readable one-word status for use in reports."""
+        """Single-word status suitable for display and filtering."""
         if self.success:
             return "ok"
         return "fallback" if self.is_fallback else "failed"
 
     @property
     def log_text(self) -> str:
-        """Combine stdout + stderr into a single log blob."""
+        """Concatenated stdout / stderr / error for display in reports."""
         parts = []
         if self.stdout.strip():
             parts.append(f"=== stdout ===\n{self.stdout.strip()}")
@@ -59,16 +51,7 @@ class ConversionResult:
 
 @dataclass
 class RunSummary:
-    """Metadata and aggregate statistics for a single conversion run.
-
-    Attributes:
-        run_name: Unique slug for this run (used in directory names).
-        started_at: UTC timestamp when the run began.
-        finished_at: UTC timestamp when the run ended (``None`` if still running).
-        results: All :class:`ConversionResult` objects from this run.
-        log_path: Path to the ``output.log`` file for this run.
-        report_path: Path to the generated ``report.html`` (set after generation).
-    """
+    """Metadata and aggregate statistics for a single conversion run."""
 
     run_name: str
     started_at: datetime
@@ -101,7 +84,7 @@ class RunSummary:
 
     @property
     def duration_s(self) -> float | None:
-        if self.started_at and self.finished_at:
+        if self.finished_at:
             return (self.finished_at - self.started_at).total_seconds()
         return None
 

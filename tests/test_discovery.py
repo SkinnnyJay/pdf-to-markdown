@@ -1,7 +1,5 @@
 """Tests for pdf_markdown.discovery."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

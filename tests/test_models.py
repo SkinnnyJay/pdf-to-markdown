@@ -1,7 +1,5 @@
 """Tests for pdf_markdown.models."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pdf_markdown.models import ConversionResult

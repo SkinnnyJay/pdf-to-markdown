@@ -1,12 +1,8 @@
 """Tests for pdf_markdown.validation."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pdf_markdown.validation import validate_output_tree, validate_single_file
-
-# ── validate_single_file ──────────────────────────────────────────────────────
 
 
 def test_valid_file_no_issues(tmp_path: Path) -> None:
@@ -57,9 +53,6 @@ def test_data_uri_skipped(tmp_path: Path) -> None:
     md = tmp_path / "doc.md"
     md.write_text("![alt](data:image/png;base64,abc123)\n", encoding="utf-8")
     assert validate_single_file(md, strict=True) == []
-
-
-# ── validate_output_tree ──────────────────────────────────────────────────────
 
 
 def test_validate_tree_all_valid(tmp_path: Path) -> None:

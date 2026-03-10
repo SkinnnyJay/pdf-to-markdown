@@ -54,6 +54,12 @@ test: ## Run pytest test suite
 test-cov: ## Run tests with coverage report
 	$(BIN)/pytest --cov=pdf_markdown --cov-report=term-missing
 
+# ── Model setup ───────────────────────────────────────────────────────────────
+
+.PHONY: setup-model
+setup-model: ## Pre-download Marker models (respects PDF_MARKDOWN_MODEL_PATH)
+	$(BIN)/python scripts/setup_model.py
+
 # ── CLI shortcuts ─────────────────────────────────────────────────────────────
 
 .PHONY: run

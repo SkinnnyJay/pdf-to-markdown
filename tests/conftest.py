@@ -1,7 +1,5 @@
 """Shared test fixtures."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest
@@ -10,7 +8,6 @@ import pytest
 @pytest.fixture()
 def tmp_pdf(tmp_path: Path) -> Path:
     """Return a path to a minimal (but structurally valid) single-page PDF."""
-    # Minimal valid 1-page PDF with no content
     pdf_bytes = (
         b"%PDF-1.4\n"
         b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"

@@ -1,10 +1,8 @@
 """Tests for pdf_markdown.output path helpers."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
-from pdf_markdown.output import assets_dir, destination_md, write_markdown
+from pdf_markdown.output import assets_dir, copy_marker_output, destination_md, write_markdown
 
 
 def test_destination_md_basic() -> None:
@@ -30,3 +28,19 @@ def test_write_markdown_creates_parents(tmp_path: Path) -> None:
     deep = tmp_path / "a" / "b" / "c" / "file.md"
     write_markdown(deep, "content")
     assert deep.exists()
+
+
+def test_copy_marker_output_embeds_metadata(tmp_path: Path, tmp_pdf: Path) -> None:
+    marker_dir = tmp_path / "marker_out"
+    marker_dir.mkdir()
+    marker_md = marker_dir / "sample.md"
+    marker_md.write_text("# Sample\n\nBody.", encoding="utf-8")
+
+    dest = tmp_path / "out" / "sample.md"
+    copy_marker_output(marker_md, dest, tmp_pdf)
+
+    assert dest.exists()
+    content = dest.read_text()
+    assert "pdf-markdown:metadata" in content
+    assert "sample.pdf" in content
+    assert "# Sample" in content
