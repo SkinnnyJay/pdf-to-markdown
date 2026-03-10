@@ -30,7 +30,19 @@ dependencies = [
     "typer>=0.24.0",
     "rich>=14.0.0",
     "pymupdf>=1.24.0",    # fitz — for fallback image extraction
-    "marker-pdf>=0.3.0",  # datalab-to/marker
+    "marker-pdf>=0.3.0",  # datalab-to/marker (default converter)
+    "Pillow>=10.0.0",     # image metadata read/write for validation
+    "markdown-it-py>=4.0.0",  # markdown parsing for validation
+]
+
+[project.optional-dependencies]
+light = [
+    "pymupdf4llm>=0.0.20",  # lightweight converter — use with PDF_MARKDOWN_CONVERTER=pymupdf4llm
+]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.0",
 ]
 
 [project.urls]
@@ -42,15 +54,8 @@ Changelog    = "https://github.com/SkinnnyJay/pdf-markdown/blob/main/CHANGELOG.m
 [project.scripts]
 pdf-markdown = "pdf_markdown.cli:app"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=9.0.0",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.15.0",
-]
-
 [tool.hatch.build.targets.wheel]
-packages = ["src/pdf_markdown"]
+packages = ["pdf_markdown"]
 
 # ── Ruff ──────────────────────────────────────────────────────────────────────
 

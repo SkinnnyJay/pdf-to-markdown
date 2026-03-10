@@ -45,6 +45,29 @@ The `pdf-markdown` command is then available in your virtual environment.
 
 > **Note:** `marker-pdf` is a heavy dependency (PyTorch). If you only want to run the tests without a full GPU stack, mock it out — the CI workflow does this automatically.
 
+### Lightweight alternative: PyMuPDF4LLM
+
+For faster, lighter conversions (no ML), use the `pymupdf4llm` backend:
+
+```bash
+pip install pdf-markdown[light]
+```
+
+Then set `PDF_MARKDOWN_CONVERTER=pymupdf4llm` in `.env` or pass `--converter pymupdf4llm` when converting. Good for native-text PDFs; falls back to image extraction on failure.
+
+---
+
+## Swappable Converters
+
+| Converter | Description | Lightweight |
+|-----------|-------------|-------------|
+| `marker` (default) | High-quality, layout-aware (ML/PyTorch) | No |
+| `pymupdf4llm` | Fast, no ML (good for native-text PDFs) | Yes |
+
+- **Configure via `.env`:** `PDF_MARKDOWN_CONVERTER=pymupdf4llm`
+- **Override via CLI:** `--converter pymupdf4llm` or `-c pymupdf4llm`
+- **List available:** `pdf-markdown converters`
+
 ---
 
 ## Quick Start
@@ -159,10 +182,15 @@ pdf-markdown report --open                # open in browser after writing
 | `--output`, `-o` | `transformed` | Root output directory |
 | `--workers`, `-w` | from env | Number of parallel workers (default: 1) |
 | `--model-path` | — | Path to HuggingFace model cache (overrides env) |
-| `--timeout` | `600` | Per-file Marker timeout in seconds |
+| `--converter`, `-c` | from env | Backend: `marker` or `pymupdf4llm` |
+| `--timeout` | `600` | Per-file conversion timeout in seconds |
 | `--run-name` | auto | Custom slug used in log and report paths |
 | `--html-report / --no-html-report` | `true` | Generate an HTML report after conversion |
 | `--dry-run` | `false` | Show what would be processed, then exit |
+
+### `converters`
+
+List available PDF-to-Markdown converter backends (no options).
 
 ### `validate`
 
@@ -281,21 +309,20 @@ make clean
 
 ```
 pdf-markdown/
-├── src/
-│   └── pdf_markdown/
-│       ├── __init__.py         # package version
-│       ├── cli.py              # Typer CLI — convert / validate / report
-│       ├── config.py           # .env / env-var settings
-│       ├── discovery.py        # PDF file resolution
-│       ├── fallback_images.py  # image extraction & placeholder Markdown
-│       ├── markdown_metadata.py # embed/extract metadata in Markdown
-│       ├── marker_runner.py    # marker_single subprocess wrapper
-│       ├── models.py           # ConversionResult / RunSummary dataclasses
-│       ├── output.py           # output path helpers & file writing
-│       ├── pdf_metadata.py     # PDF metadata extraction
-│       ├── report.py           # HTML report generator
-│       ├── run_logger.py       # NDJSON run-log read/write
-│       └── validation.py       # Markdown output validation
+├── pdf_markdown/
+│   ├── __init__.py         # package version
+│   ├── cli.py              # Typer CLI — convert / validate / report
+│   ├── config.py           # .env / env-var settings
+│   ├── discovery.py        # PDF file resolution
+│   ├── fallback_images.py  # image extraction & placeholder Markdown
+│   ├── markdown_metadata.py # embed/extract metadata in Markdown
+│   ├── marker_runner.py    # marker_single subprocess wrapper
+│   ├── models.py           # ConversionResult / RunSummary dataclasses
+│   ├── output.py           # output path helpers & file writing
+│   ├── pdf_metadata.py     # PDF metadata extraction
+│   ├── report.py           # HTML report generator
+│   ├── run_logger.py       # NDJSON run-log read/write
+│   └── validation.py       # Markdown output validation
 ├── tests/
 │   ├── conftest.py
 │   ├── test_cli.py

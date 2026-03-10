@@ -31,15 +31,15 @@ install-dev: venv ## Install package + dev/test deps
 
 .PHONY: format
 format: ## Format code with ruff
-	$(BIN)/ruff format src/ tests/ scripts/
+	$(BIN)/ruff format pdf_markdown/ tests/ scripts/
 
 .PHONY: lint
 lint: ## Lint code with ruff
-	$(BIN)/ruff check src/ tests/ scripts/
+	$(BIN)/ruff check pdf_markdown/ tests/ scripts/
 
 .PHONY: lint-fix
 lint-fix: ## Lint and auto-fix safe issues
-	$(BIN)/ruff check --fix src/ tests/ scripts/
+	$(BIN)/ruff check --fix pdf_markdown/ tests/ scripts/
 
 .PHONY: check
 check: format lint ## Format then lint (full quality gate)
@@ -59,6 +59,13 @@ test-cov: ## Run tests with coverage report
 .PHONY: setup-model
 setup-model: ## Pre-download Marker models (respects PDF_MARKDOWN_MODEL_PATH)
 	$(BIN)/python scripts/setup_model.py
+
+# ── Test data ─────────────────────────────────────────────────────────────────
+
+.PHONY: generate-shakespeare
+generate-shakespeare: ## Generate Shakespeare PDFs (COUNT=N, TEST_DATA_DIR from .env)
+	$(BIN)/python scripts/generate_shakespeare_pdfs.py \
+		$(if $(COUNT),--count $(COUNT),)
 
 # ── CLI shortcuts ─────────────────────────────────────────────────────────────
 
@@ -138,7 +145,7 @@ git-init: ## Initialise git repo and make first commit
 
 .PHONY: clean
 clean: ## Remove build artefacts and caches
-	rm -rf dist/ build/ *.egg-info src/*.egg-info
+	rm -rf dist/ build/ *.egg-info pdf_markdown/*.egg-info
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true

@@ -7,6 +7,11 @@ try:
 except ImportError:
     fitz = None  # type: ignore[assignment]
 
+try:
+    from pdf_markdown.image_metadata import write_image_metadata
+except ImportError:
+    write_image_metadata = None  # type: ignore[assignment]
+
 
 def extract_images(
     pdf: Path,
@@ -39,8 +44,17 @@ def extract_images(
     images: list[Path] = []
     for page_num, page in enumerate(doc, start=1):
         pix = page.get_pixmap(matrix=mat, alpha=False)
-        img_path = assets_dir / f"{pdf.stem}-p{page_num:03d}.png"
+        img_name = f"{pdf.stem}-p{page_num:03d}.png"
+        img_path = assets_dir / img_name
         pix.save(str(img_path))
+        image_id = img_name.removesuffix(".png")
+        if write_image_metadata:
+            write_image_metadata(
+                img_path,
+                source_file=pdf.name,
+                md_file=f"{pdf.stem}.md",
+                image_id=image_id,
+            )
         images.append(img_path)
 
     doc.close()
@@ -78,7 +92,9 @@ def generate_placeholder_markdown(
 
     for img in images:
         rel = img.relative_to(assets_dir.parent)
-        lines.append(f"![{img.name}]({rel})")
+        image_id = img.stem  # e.g. stem-p001 — unique ID tying image to markdown
+        alt = f"pdf-markdown:{image_id}"
+        lines.append(f"![{alt}]({rel})")
         lines.append("")
 
     if not images:

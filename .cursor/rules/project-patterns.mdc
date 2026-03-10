@@ -1,6 +1,6 @@
 ---
 description: "pdf-markdown CLI, config, and module patterns"
-globs: ["src/pdf_markdown/**/*.py"]
+globs: ["pdf_markdown/**/*.py"]
 alwaysApply: false
 ---
 

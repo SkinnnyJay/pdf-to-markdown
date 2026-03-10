@@ -32,6 +32,6 @@ alwaysApply: true
 - UPPER_SNAKE for module-level constants
 
 ## Structure
-- One responsibility per module under `src/pdf_markdown/`
+- One responsibility per module under `pdf_markdown/`
 - Test files mirror source: `tests/test_<module>.py`
 - Use `__all__` to declare public API

@@ -2,7 +2,13 @@
 
 from pathlib import Path
 
-from pdf_markdown.validation import validate_output_tree, validate_single_file
+from pdf_markdown.validation import (
+    validate_images,
+    validate_markdown,
+    validate_output_tree,
+    validate_pdf,
+    validate_single_file,
+)
 
 
 def test_valid_file_no_issues(tmp_path: Path) -> None:
@@ -19,8 +25,11 @@ def test_empty_file_is_error(tmp_path: Path) -> None:
 
 
 def test_image_ref_exists_no_issue(tmp_path: Path) -> None:
+    # Create minimal valid PNG via Pillow (required for image format validation)
+    from PIL import Image
+
     img = tmp_path / "img.png"
-    img.write_bytes(b"")
+    Image.new("RGB", (1, 1), color="white").save(img)
     md = tmp_path / "doc.md"
     md.write_text("![alt](img.png)\n", encoding="utf-8")
     issues = validate_single_file(md, strict=True)
@@ -94,3 +103,31 @@ def test_validate_tree_strict_propagates(tmp_path: Path) -> None:
 
     assert non_strict[0]["severity"] == "warning"
     assert strict[0]["severity"] == "error"
+
+
+def test_validate_pdf_valid(tmp_pdf: Path) -> None:
+    assert validate_pdf(tmp_pdf) == []
+
+
+def test_validate_pdf_missing(tmp_path: Path) -> None:
+    issues = validate_pdf(tmp_path / "nonexistent.pdf")
+    assert len(issues) == 1
+    assert "does not exist" in issues[0]["message"]
+
+
+def test_validate_markdown_valid(tmp_path: Path) -> None:
+    md = tmp_path / "doc.md"
+    md.write_text("# Hello\n\nContent.", encoding="utf-8")
+    assert validate_markdown(md_path=md) == []
+
+
+def test_validate_markdown_content_param() -> None:
+    assert validate_markdown(content="# Hi") == []
+
+
+def test_validate_images_missing_ref(tmp_path: Path) -> None:
+    md = tmp_path / "doc.md"
+    md.write_text("![x](missing.png)\n", encoding="utf-8")
+    issues = validate_images(md, strict=False)
+    assert len(issues) == 1
+    assert "Missing" in issues[0]["message"]

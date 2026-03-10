@@ -20,7 +20,7 @@ You explore the pdf-markdown codebase to answer questions about how things work,
 ## Codebase Structure
 
 ```
-src/pdf_markdown/   -> Library (cli, config, discovery, marker_runner, output, report, etc.)
+pdf_markdown/       -> Library (cli, config, discovery, marker_runner, output, report, etc.)
 tests/              -> pytest (test_<module>.py mirrors src)
 scripts/            -> Standalone utilities (setup_model, validate_output)
 Makefile            -> make help for all targets

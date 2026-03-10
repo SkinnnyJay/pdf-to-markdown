@@ -70,6 +70,7 @@ class Settings:
         self.workers: int = _env_int("PDF_MARKDOWN_WORKERS", 1)
         _mp = _env("PDF_MARKDOWN_MODEL_PATH", "").strip()
         self.model_path: Path | None = Path(_mp) if _mp else None
+        self.converter: str = _env("PDF_MARKDOWN_CONVERTER", "marker").strip().lower()
 
     def run_dir(self, run_name: str) -> Path:
         """``<data_dir>/<log_subdir>/<run_name>/`` — not yet created."""

@@ -25,7 +25,7 @@ make test    # pytest
 
 ```
 pdf-markdown/
-├── src/pdf_markdown/      # Library source — one responsibility per module
+├── pdf_markdown/          # Library source — one responsibility per module
 │   ├── cli.py             # Typer CLI entrypoint (convert / validate / report)
 │   ├── config.py          # .env / environment settings
 │   ├── discovery.py        # PDF file resolution
@@ -38,7 +38,7 @@ pdf-markdown/
 │   ├── report.py           # HTML report generation
 │   ├── run_logger.py       # NDJSON run log serialisation
 │   └── validation.py      # Output integrity checks
-├── tests/                 # pytest test suite (mirrors src modules 1-to-1)
+├── tests/                 # pytest test suite (mirrors pdf_markdown modules 1-to-1)
 ├── scripts/               # Standalone utility scripts
 ├── .github/               # CI workflows and issue/PR templates
 ├── pyproject.toml         # Package metadata, deps, ruff + pytest config
@@ -73,7 +73,7 @@ pdf-markdown/
 ### 3. Tests
 
 - Every new module or feature must ship with corresponding tests under `tests/`.
-- Test files mirror source modules: `src/pdf_markdown/foo.py` → `tests/test_foo.py`.
+- Test files mirror source modules: `pdf_markdown/foo.py` → `tests/test_foo.py`.
 - Use `pytest` fixtures and `unittest.mock.patch` for subprocess/IO isolation.
 - Do **not** require Marker or a GPU to be present in tests — mock `run_marker`.
 
@@ -104,7 +104,7 @@ chore: bump ruff to 0.5.0
 
 ## Adding a new module
 
-1. Create `src/pdf_markdown/<module>.py` with a module-level docstring and `__all__`.
+1. Create `pdf_markdown/<module>.py` with a module-level docstring and `__all__`.
 2. Add the corresponding `tests/test_<module>.py`.
 3. Export public symbols from `__init__.py` if they form part of the library API.
 4. Add a short entry to `CHANGELOG.md` under `[Unreleased]`.

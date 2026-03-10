@@ -30,7 +30,7 @@ make test-cov             # pytest with coverage
 
 ## Architecture
 
-The CLI is built with **Typer** (Rich markup mode) and has three commands: `convert`, `validate`, `report`. Entry point: `src/pdf_markdown/cli.py` → `app`.
+The CLI is built with **Typer** (Rich markup mode) and has three commands: `convert`, `validate`, `report`. Entry point: `pdf_markdown/cli.py` → `app`.
 
 **Conversion pipeline** (`cli.py:_convert_one`):
 1. `discovery.py` resolves PDF inputs into `(group, path)` pairs — supports `--source` (folder tree), `--groups` (filter), and `--input` (explicit files/dirs)
@@ -51,6 +51,6 @@ The CLI is built with **Typer** (Rich markup mode) and has three commands: `conv
 - **Python ≥ 3.12** required. Uses `X | Y` union syntax, not `Optional`/`Union`.
 - **Ruff** for formatting and linting. Line length: 100. See `[tool.ruff]` in `pyproject.toml` for rule selection.
 - `B008` is ignored (Typer uses default argument expressions like `typer.Option(...)`).
-- Build system: **Hatchling** with `src/` layout (`src/pdf_markdown/`).
+- Build system: **Hatchling** with flat layout (`pdf_markdown/`).
 - Tests use `tmp_path` and `tmp_pdf` fixture (defined in `conftest.py`). Marker is mocked via subprocess mock — marker-pdf is not installed in CI.
 - CI skips `marker-pdf` installation (heavy ML/PyTorch dependency) and installs runtime deps individually instead.

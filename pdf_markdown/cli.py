@@ -16,6 +16,7 @@ from rich.table import Table
 
 from pdf_markdown import __version__
 from pdf_markdown.config import Settings
+from pdf_markdown.converters import get_converter, list_converters
 from pdf_markdown.discovery import (
     collect_pdfs_from_folder,
     collect_pdfs_from_groups,
@@ -23,13 +24,17 @@ from pdf_markdown.discovery import (
 )
 from pdf_markdown.fallback_images import extract_images, generate_placeholder_markdown
 from pdf_markdown.markdown_metadata import embed_metadata
-from pdf_markdown.marker_runner import find_marker_output, run_marker
 from pdf_markdown.models import ConversionResult, RunSummary
-from pdf_markdown.output import assets_dir, copy_marker_output, destination_md, write_markdown
+from pdf_markdown.output import (
+    assets_dir,
+    destination_md,
+    write_converter_result,
+    write_markdown,
+)
 from pdf_markdown.pdf_metadata import get_pdf_metadata
 from pdf_markdown.report import generate_report
 from pdf_markdown.run_logger import make_run_name, read_run_log, write_run_log
-from pdf_markdown.validation import validate_output_tree
+from pdf_markdown.validation import validate_output_tree, validate_single_file
 
 _SECS_PER_MINUTE = 60
 
@@ -171,6 +176,14 @@ def convert(
             dir_okay=True,
         ),
     ] = None,
+    converter: Annotated[
+        str | None,
+        typer.Option(
+            "--converter",
+            "-c",
+            help="PDF-to-Markdown converter backend. Overrides PDF_MARKDOWN_CONVERTER.",
+        ),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -231,10 +244,14 @@ def convert(
     name = run_name or make_run_name("convert")
     num_workers = workers if workers is not None else cfg.workers
     mp = model_path or cfg.model_path
+    conv_name = converter or cfg.converter or "marker"
+    conv = get_converter(conv_name)
 
     model_line = f"  Model: [bold]{mp!s}[/bold]" if mp else ""
+    conv_line = f"  Converter: [bold]{conv.name}[/bold]"
     run_info = (
-        f"[dim]Run name: [bold]{name}[/bold]  Workers: [bold]{num_workers}[/bold]{model_line}[/dim]"
+        f"[dim]Run name: [bold]{name}[/bold]  Workers: [bold]{num_workers}[/bold]"
+        f"{conv_line}{model_line}[/dim]"
     )
     console.print(
         Panel(
@@ -254,6 +271,7 @@ def convert(
         timeout=timeout,
         workers=num_workers,
         model_path=mp,
+        converter=conv,
     )
     finished = datetime.now(tz=UTC)
 
@@ -284,6 +302,25 @@ def convert(
         raise typer.Exit(code=1)
 
 
+# ── converters ─────────────────────────────────────────────────────────────────
+
+
+@app.command("converters")
+def converters_list() -> None:
+    """List available PDF-to-Markdown converter backends."""
+    table = Table(title="Available Converters", show_lines=True)
+    table.add_column("Name", style="cyan", no_wrap=True)
+    table.add_column("Description")
+    table.add_column("Lightweight", no_wrap=True)
+    for name, desc, light in list_converters():
+        light_str = "[green]yes[/green]" if light else "[dim]no[/dim]"
+        table.add_row(name, desc, light_str)
+    console.print(table)
+    console.print(
+        "\n[dim]Set PDF_MARKDOWN_CONVERTER in .env or use --converter / -c when converting.[/dim]"
+    )
+
+
 # ── validate ──────────────────────────────────────────────────────────────────
 
 
@@ -295,10 +332,8 @@ def validate(
             "--output",
             "-o",
             exists=True,
-            file_okay=False,
-            dir_okay=True,
             resolve_path=True,
-            help="Root output directory to validate (e.g. ./transformed).",
+            help="Output dir or single .md file (e.g. ./transformed or combined.md).",
         ),
     ],
     strict: Annotated[
@@ -319,7 +354,10 @@ def validate(
 
     Exits with code 1 if any errors are found.
     """
-    issues = validate_output_tree(output, strict=strict)
+    if output.is_file() and output.suffix.lower() == ".md":
+        issues = validate_single_file(output, strict=strict)
+    else:
+        issues = validate_output_tree(output, strict=strict)
 
     if not issues:
         console.print(f"[green]✓ All files valid in {output!s}[/green]")
@@ -493,6 +531,7 @@ def _run_conversions(
     timeout: int,
     workers: int = 1,
     model_path: Path | None = None,
+    converter=None,
 ) -> list[ConversionResult]:
     """Convert all PDFs, optionally in parallel, with a Rich progress bar."""
     results: list[ConversionResult] = []
@@ -509,6 +548,7 @@ def _run_conversions(
             langs=langs,
             timeout=timeout,
             model_path=model_path,
+            converter=converter,
             worker_id=worker_id if workers > 1 else None,
         )
 
@@ -556,9 +596,10 @@ def _convert_one(
     langs: str | None,
     timeout: int,
     model_path: Path | None = None,
+    converter=None,
     worker_id: int | None = None,
 ) -> ConversionResult:
-    """Run Marker for one PDF; fall back to image extraction on failure."""
+    """Run converter for one PDF; fall back to image extraction on failure."""
     dest = destination_md(output, group, pdf)
     a_dir = assets_dir(output, group, pdf)
     stdout = ""
@@ -566,36 +607,39 @@ def _convert_one(
     error = ""
 
     t0 = time.monotonic()
+    conv = converter or get_converter()
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        success, stdout, stderr = run_marker(
+        result = conv.convert(
             pdf,
             tmp_path,
-            batch_multiplier=batch_multiplier,
-            langs=langs,
             timeout=timeout,
             model_path=model_path,
         )
+        success = result.success
+        stdout = result.stdout
+        stderr = result.stderr
+        if not success:
+            error = result.error or stderr or "Conversion failed."
 
-        if success:
-            marker_md = find_marker_output(tmp_path, pdf.stem)
-            if marker_md:
-                copy_marker_output(marker_md, dest, pdf)
-                return ConversionResult(
-                    pdf=pdf,
-                    group=group,
-                    success=True,
-                    output_md=dest,
-                    stdout=stdout,
-                    stderr=stderr,
-                    duration_s=time.monotonic() - t0,
-                    worker_id=worker_id,
-                )
-            success = False
-            error = "Marker exited 0 but produced no .md output."
-        else:
-            error = stderr or "Marker returned a non-zero exit code."
+        if success and result.markdown:
+            write_converter_result(
+                result,
+                dest,
+                pdf,
+                result.images_dir,
+            )
+            return ConversionResult(
+                pdf=pdf,
+                group=group,
+                success=True,
+                output_md=dest,
+                stdout=stdout,
+                stderr=stderr,
+                duration_s=time.monotonic() - t0,
+                worker_id=worker_id,
+            )
 
     try:
         images = extract_images(pdf, a_dir)

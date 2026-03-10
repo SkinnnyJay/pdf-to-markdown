@@ -44,10 +44,10 @@ jobs:
           pip install typer rich pymupdf pytest pytest-cov ruff
 
       - name: Lint (ruff)
-        run: ruff check src/ tests/ scripts/
+        run: ruff check pdf_markdown/ tests/ scripts/
 
       - name: Format check (ruff)
-        run: ruff format --check src/ tests/ scripts/
+        run: ruff format --check pdf_markdown/ tests/ scripts/
 
       - name: Run tests
         run: pytest --tb=short -q
@@ -73,5 +73,5 @@ jobs:
         with:
           python-version: "3.14"
       - run: pip install ruff
-      - run: ruff check src/ tests/ scripts/
-      - run: ruff format --check src/ tests/ scripts/
+      - run: ruff check pdf_markdown/ tests/ scripts/
+      - run: ruff format --check pdf_markdown/ tests/ scripts/

@@ -29,7 +29,7 @@ Catalog every failure into a task list:
 
 Example:
 ```
-[ ] src/pdf_markdown/output.py -- line too long (E501)
+[ ] pdf_markdown/output.py -- line too long (E501)
 [ ] tests/test_cli.py -- "test_convert_uses_fallback" assertion fails
 ```
 

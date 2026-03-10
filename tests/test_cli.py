@@ -1,7 +1,7 @@
 """Tests for the pdf-markdown CLI (Typer + Rich) via typer.testing."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -88,15 +88,24 @@ def test_convert_uses_fallback_on_marker_failure(
     tmp_path: Path,
     tmp_pdf: Path,
 ) -> None:
+    from pdf_markdown.converters.base import ConverterResult
+
     output_dir = tmp_path / "out"
+    failed_result = ConverterResult(
+        success=False,
+        markdown="",
+        error="marker error",
+    )
+
+    def mock_convert(*args, **kwargs):
+        return failed_result
 
     with (
-        patch("pdf_markdown.cli.run_marker", return_value=(False, "", "marker error")),
-        patch(
-            "pdf_markdown.cli.extract_images",
-            return_value=[],
-        ),
+        patch("pdf_markdown.cli.get_converter") as mock_get,
+        patch("pdf_markdown.cli.extract_images", return_value=[]),
     ):
+        mock_conv = mock_get.return_value
+        mock_conv.convert = mock_convert
         result = runner.invoke(
             app,
             [
@@ -119,11 +128,16 @@ def test_convert_uses_fallback_on_marker_failure(
 
 def test_convert_with_workers_flag(tmp_path: Path, tmp_pdf: Path) -> None:
     """--workers 2 runs parallel conversion; worker_id appears in results."""
+    from pdf_markdown.converters.base import ConverterResult
+
     output_dir = tmp_path / "out"
+    failed_result = ConverterResult(success=False, markdown="", error="marker error")
+
     with (
-        patch("pdf_markdown.cli.run_marker", return_value=(False, "", "marker error")),
+        patch("pdf_markdown.cli.get_converter") as mock_get,
         patch("pdf_markdown.cli.extract_images", return_value=[]),
     ):
+        mock_get.return_value.convert = lambda *a, **k: failed_result
         result = runner.invoke(
             app,
             [
@@ -141,15 +155,21 @@ def test_convert_with_workers_flag(tmp_path: Path, tmp_pdf: Path) -> None:
 
 
 def test_convert_with_model_path(tmp_path: Path, tmp_pdf: Path) -> None:
-    """--model-path is passed through to Marker."""
+    """--model-path is passed through to the converter."""
+    from pdf_markdown.converters.base import ConverterResult
+
     output_dir = tmp_path / "out"
     model_dir = tmp_path / "hf_cache"
     model_dir.mkdir()
+    failed_result = ConverterResult(success=False, markdown="", error="marker error")
+
     with (
-        patch("pdf_markdown.cli.run_marker") as mock_run,
+        patch("pdf_markdown.cli.get_converter") as mock_get,
         patch("pdf_markdown.cli.extract_images", return_value=[]),
     ):
-        mock_run.return_value = (False, "", "marker error")
+        mock_conv = MagicMock()
+        mock_conv.convert.return_value = failed_result
+        mock_get.return_value = mock_conv
         runner.invoke(
             app,
             [
@@ -162,8 +182,8 @@ def test_convert_with_model_path(tmp_path: Path, tmp_pdf: Path) -> None:
                 str(model_dir),
             ],
         )
-    mock_run.assert_called()
-    call_kwargs = mock_run.call_args[1]
+    mock_conv.convert.assert_called()
+    call_kwargs = mock_conv.convert.call_args[1]
     assert call_kwargs.get("model_path") == model_dir
 
 
